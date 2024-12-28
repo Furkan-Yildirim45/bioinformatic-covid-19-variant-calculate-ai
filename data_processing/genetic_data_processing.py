@@ -5,6 +5,8 @@ import logging
 # Loglama yapılandırması
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
+from collections import Counter
+
 class GeneticDataProcessor:
     def __init__(self, file_path, max_length=5000):
         self.file_path = file_path
@@ -12,8 +14,9 @@ class GeneticDataProcessor:
         self.sequences = []
         self.labels = []
         self.numeric_sequences = []
-        self.padded_sequences = []
+        self.padded_sequences = []  
         self.encoded_labels = []
+        self.invalid_bases = []  # Geçersiz bazları tutacak liste
 
     def read_data(self):
         """Veri dosyasını oku ve başlıkları ayır."""
@@ -27,19 +30,29 @@ class GeneticDataProcessor:
                 if line.startswith(">"):  # Başlık satırlarını kontrol et
                     parts = line.split(" ", 1)  # Başlık ve açıklamayı ayır
                     current_label = parts[1] if len(parts) > 1 else "Unknown"
-                    self.labels.append(current_label)
                 elif line:  # Boş olmayan dizilim satırları
-                    self.sequences.append(line)
+                    if current_label is not None:  # Etiketle ilişkilendirilmiş dizilim
+                        self.labels.append(current_label)
+                        self.sequences.append(line)
+                    else:
+                        print(f"Uyarı: Etiketsiz bir dizilim bulundu. Satır: {line}")
         except Exception as e:
             print(f"Dosya okuma hatası: {e}")
+
             
     def validate_sequence(self, seq):
-        if not all(base in "ATCG" for base in seq):
-            raise ValueError(f"Geçersiz genetik baz: {seq}")
-
+        """Geçersiz bazları kontrol et.""" 
+        valid_bases = "ATCG"
+        invalid_bases = [base for base in seq if base not in valid_bases]
+        
+        if invalid_bases:
+            self.invalid_bases.append(''.join(invalid_bases))  # Geçersiz bazları kaydet
+            print(f"Geçersiz genetik bazlar bulundu: {''.join(invalid_bases)} Dizilim: {seq}")
+        else:
+            print("Dizilimde geçersiz baz bulunmamaktadır.")
 
     def convert_to_numeric(self):
-        """Dizilimleri sayısal verilere dönüştür."""
+        """Dizilimleri sayısal verilere dönüştür.""" 
         nucleotide_mapping = {"A": 0, "T": 1, "C": 2, "G": 3, "N": -1}
 
         for seq in self.sequences:
@@ -53,15 +66,17 @@ class GeneticDataProcessor:
         """Geçersiz bazları en yaygın baz ile doldur (NumPy ile)."""
         for i, seq in enumerate(self.numeric_sequences):
             seq = np.array(seq)
-            invalid_indices = seq == -1
-            if invalid_indices.any():
-                valid_bases = seq[~invalid_indices]
-                if valid_bases.size > 0:
-                    most_common_base = np.bincount(valid_bases).argmax()
+            invalid_indices = seq == -1  # -1 geçersiz baz olarak kabul ediliyor
+            
+            if invalid_indices.any():  # Eğer geçersiz baz varsa
+                # En yaygın (mod) bazla doldurma
+                valid_bases = seq[~invalid_indices]  # Geçerli bazları al
+                if valid_bases.size > 0:  # Geçerli bazlar varsa
+                    most_common_base = Counter(valid_bases).most_common(1)[0][0]
                     seq[invalid_indices] = most_common_base
-                else:
-                    seq[:] = 0  # Tüm dizilim geçersizse 'A' ile doldur
+            # Eğer geçersiz baz yoksa, herhangi bir şey yapmaya gerek yok
             self.numeric_sequences[i] = seq.tolist()
+
 
     def pad_sequences(self, padding_value=0):
         """Dizilimleri belirli bir uzunluğa kadar kes veya doldur (NumPy ile)."""
@@ -93,33 +108,20 @@ class GeneticDataProcessor:
         self.encoded_labels = [self.label_mapping[label] for label in self.labels]
         
         logging.info(f"{len(unique_labels)} benzersiz etiket başarıyla kodlandı.")
+        print(f"label_mapping: {len(self.label_mapping)}.")
+        print(f"encoded_labels: {len(self.encoded_labels)}.")
 
     def process_data(self, padding_value=0):
-        """Verileri okuma, dönüştürme ve hazırlama işlemini tek adımda gerçekleştir."""
         logging.info("Veri işleme başlatıldı...")
         self.read_data()
-        self.validate_sequence()
+        for seq in self.sequences:
+            self.validate_sequence(seq)
         self.convert_to_numeric()
         self.pad_sequences(padding_value=padding_value)
         self.encode_labels()
+        
+        # Uzunluk kontrolü
+        if len(self.sequences) != len(self.labels):
+            raise ValueError(f"Etiket ve dizilim uzunlukları eşleşmiyor! Diziler: {len(self.sequences)}, Etiketler: {len(self.labels)}")
+
         logging.info("Veri işleme tamamlandı.")
-
-    def process_and_display_data(self, padding_value=0):
-            """Verileri işleyip detayları ekrana yazdır."""
-            try:
-                # Verileri işle
-                self.process_data(padding_value=padding_value)
-
-                # İşlenmiş verileri inceleyin
-                print("İlk 5 işlenmiş dizilim:")
-                for seq in self.padded_sequences[:5]:
-                    print(seq)
-
-                print("\nEtiketler (Encoded Labels):", self.encoded_labels)
-
-                print("\nEtiket Eşleştirmesi:")
-                for label, idx in self.label_mapping.items():
-                    print(f"{label}: {idx}")
-
-            except Exception as e:
-                print(f"Bir hata oluştu: {e}")
