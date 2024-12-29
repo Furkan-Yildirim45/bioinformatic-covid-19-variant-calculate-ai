@@ -42,6 +42,10 @@ class MutationPredictionHMM:
         :param test_sequence: Test verisi (DNA dizisi)
         :return: En olasılıklı durumlar (Mutasyon Yok/Mutasyon Var)
         """
+        # Eğer test_sequence bir liste listesi ise düzleştir
+        if isinstance(test_sequence[0], list):  
+            test_sequence = [item for sublist in test_sequence for item in sublist]
+        
         # Test dizisini sayılarla temsil etme
         test_sequence = np.array([self.observation_map.get(b, 4) for b in test_sequence]).reshape(-1, 1)
         
@@ -50,6 +54,7 @@ class MutationPredictionHMM:
         
         # Sonuçları döndürme
         return [self.states[i] for i in predicted_states]
+
         
     def predict_multiple(self, test_sequences):
         """

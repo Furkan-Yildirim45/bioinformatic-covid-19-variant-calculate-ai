@@ -1,4 +1,3 @@
-from hmmlearn import hmm
 import numpy as np
 from sklearn.metrics import accuracy_score
 import joblib
@@ -25,12 +24,12 @@ def read_fasta(file_path):
 if __name__ == "__main__":
     
     # Dosyayı oku
-    file_path = "data/SARS-genomes.fa"  # Yüklediğiniz dosya adı
-    train_sequences = read_fasta(file_path)
+    train_file = "data/SARS-genomes-train.fa"  # Yüklediğiniz dosya adı
+    test_file = "data/SARS-genomes-test.fa"  # Yüklediğiniz dosya adı
+    train_sequences = read_fasta(train_file)
 
     # Eğitim verisi çıktısını kontrol et
-    test_sequence = train_sequences.pop(0)  # İlk sırayı test verisi olarak kullan
-    print(f"Eğitim verisi (ilk 3 sıra): {train_sequences[:3]}")
+    test_sequence = read_fasta(test_file)
     
     # Modeli oluştur
     mutation_hmm = MutationPredictionHMM()
