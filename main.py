@@ -1,79 +1,54 @@
-from sklearn.model_selection import train_test_split
-from data_processing.genetic_data_processing import GeneticDataProcessor
+from hmmlearn import hmm
+import numpy as np
+from sklearn.metrics import accuracy_score
+import joblib
+
 from model.hidden_markov_model import MutationPredictionHMM
 
+def read_fasta(file_path):
+    sequences = []
+    with open(file_path, 'r') as file:
+        sequence = ""
+        for line in file:
+            line = line.strip()
+            if line.startswith(">"):
+                if sequence:
+                    sequences.append(list(sequence))
+                    sequence = ""
+            else:
+                sequence += line
+        if sequence:  # Add the last sequence
+            sequences.append(list(sequence))
+    return sequences
 
-def process_data(file_path):
-    """
-    Veriyi işleme ve tüm dizileri ve etiketleri döndürme.
-    """
-    processor = GeneticDataProcessor(file_path)
-    processor.process_data()
-
-    # Tüm diziler (numeric_sequences) ve etiketler (encoded_labels)
-    sequences = processor.numeric_sequences
-    labels = processor.encoded_labels  # İşlenmiş etiketler
-
-    print(f"Toplam diziler: {len(sequences)}")
-    print(f"Toplam etiketler: {len(labels)}")
-
-    return sequences, labels
-
-
-def educate_model(train_sequences, train_labels, save_path='model_ai/mutation_model.pkl'):
-    """
-    Modeli eğitim verisi ile eğit ve kaydet.
-    """
-    hmm_model = MutationPredictionHMM()
-    hmm_model.fit(train_sequences)  # Etiketleri kaldır
-    print("Model başarıyla eğitildi.")
-
-    hmm_model.save_model(save_path)
-    print(f"Model '{save_path}' konumuna kaydedildi.")
-    return hmm_model
-
-
-def evaluate_model(hmm_model, test_sequences, test_labels=None):
-    """
-    Modeli test verisi üzerinde değerlendir.
-    """
-    accuracy, per_sequence_accuracy = hmm_model.evaluate(test_sequences, test_labels)
-
-    if accuracy is not None:
-        print(f"Test doğruluğu: {accuracy:.2f}")
-    else:
-        print("Test doğruluğu hesaplanamadı çünkü etiketler sağlanmadı.")
-    
-    if per_sequence_accuracy is not None:
-        print("Dizi başına doğruluk:", per_sequence_accuracy)
-    else:
-        print("Dizi başına doğruluk hesaplanamadı çünkü etiketler sağlanmadı.")
-
-    return accuracy
-
-
-def main():
-    # Dosya yolu belirle
-    file_path = "data/SARS-genomes.fa"  # Gerçek dosya yolunu belirtmelisin
-
-    # Veriyi işle
-    sequences, labels = process_data(file_path)
-
-    # Veriyi eğitim ve test kümelerine ayır
-    train_sequences, test_sequences, train_labels, test_labels = train_test_split(
-        sequences, labels, test_size=0.2, random_state=42
-    )
-
-    # Eğitim verisi ile modeli eğit ve kaydet
-    hmm_model = educate_model(train_sequences, train_labels)
-
-    # Modeli test verisi ile değerlendir
-    accuracy = evaluate_model(hmm_model, test_sequences, test_labels)
-    if accuracy is not None:
-        print(f"Model başarıyla değerlendirildi. Test doğruluğu: {accuracy:.2f}")
-    else:
-        print("Model değerlendirmesi sırasında doğruluk hesaplanamadı.")
-
-
+# Ana kod
 if __name__ == "__main__":
-    main()
+    
+    # Dosyayı oku
+    file_path = "data/SARS-genomes.fa"  # Yüklediğiniz dosya adı
+    train_sequences = read_fasta(file_path)
+
+    # Eğitim verisi çıktısını kontrol et
+    test_sequence = train_sequences.pop(0)  # İlk sırayı test verisi olarak kullan
+    print(f"Eğitim verisi (ilk 3 sıra): {train_sequences[:3]}")
+    
+    # Modeli oluştur
+    mutation_hmm = MutationPredictionHMM()
+
+    # Modeli eğit
+    mutation_hmm.fit(train_sequences)
+
+    # Test dizisiyle tahmin yap
+    predictions = mutation_hmm.predict(test_sequence)
+    print(f"Tahmin edilen durumlar: {predictions}")
+
+    # Doğruluğu hesaplayın
+    accuracy, per_sequence_accuracy = mutation_hmm.evaluate([test_sequence], [predictions])
+
+    # Genel doğruluğu yazdır
+    print(f"Genel doğruluk: {accuracy * 100:.2f}%")
+
+    # Her bir test dizisi için doğruluk
+    for idx, acc in enumerate(per_sequence_accuracy):
+        print(f"Test dizisi {idx+1} için doğruluk: {acc * 100:.2f}%")
+

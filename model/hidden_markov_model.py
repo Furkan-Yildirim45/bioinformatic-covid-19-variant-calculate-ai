@@ -50,42 +50,68 @@ class MutationPredictionHMM:
         
         # Sonuçları döndürme
         return [self.states[i] for i in predicted_states]
-    
+        
     def predict_multiple(self, test_sequences):
         """
-        Birden fazla test dizisi için tahmin yapmak.
-        :param test_sequences: Test dizileri
-        :return: En olasılıklı durumlar
+        Birden fazla test dizisi için tahmin yapar.
+        :param test_sequences: Test dizileri (sayılara dönüştürülmüş)
+        :return: Her bir test dizisi için tahmin edilen etiketler
         """
-        all_sequences = np.concatenate([np.array([self.observation_map.get(b, 4) for b in seq]).reshape(-1, 1) for seq in test_sequences])
-        logprob, predicted_states = self.model.decode(all_sequences, algorithm="viterbi")
-        
-        predictions = []
+        all_sequences = np.concatenate([
+            np.array([self.observation_map.get(str(b), 4) for b in seq]).reshape(-1, 1)  # Her bir öğeyi string’e dönüştür
+            for seq in test_sequences
+        ])
+
+        # Burada tüm dizileri birleştirdikten sonra, Hidden Markov Model tahminini yapabiliriz
+        predicted_labels = self.model.predict(all_sequences)
+
+        # Burada her test dizisi için tahminleri saklayalım
+        predicted_labels_per_sequence = []
         idx = 0
         for seq in test_sequences:
             length = len(seq)
-            predictions.append([self.states[i] for i in predicted_states[idx:idx+length]])
+            predicted_labels_per_sequence.append(predicted_labels[idx:idx + length])
             idx += length
-        return predictions
-        
+
+        return predicted_labels_per_sequence
+
+
     def evaluate(self, test_sequences, test_labels=None):
         """
         Modelin doğruluğunu değerlendirmek için fonksiyon.
-        :param test_sequences: Test verisi (DNA dizileri) 
+        :param test_sequences: Test verisi (DNA dizileri)
         :param test_labels: Gerçek etiketler (isteğe bağlı)
         """
-        predicted_states = [self.predict(seq) for seq in test_sequences]
-        predicted_labels = [state[0] for state in predicted_states]  # İlk durum tahminini alıyoruz
 
-        # Eğer test_labels None değilse doğruluk hesapla
+        # Tahmin edilen durumları elde et
+        predicted_labels = []
+        for seq in test_sequences:
+            predicted_states = self.predict(seq)
+            predicted_labels.append(predicted_states)  # Her dizinin tahmin ettiği tüm durumları alıyoruz
+
+        # Tahminlerin sayıya dönüştürülmesi
+        label_mapping = {'Mutasyon Yok': 0, 'Mutasyon Var': 1}
+        predicted_labels = [[label_mapping.get(x, x) for x in seq] for seq in predicted_labels]  # Haritada olmayanları olduğu gibi bırak
+
+        # Eğer test_labels sağlanmışsa doğruluğu hesapla
         if test_labels is not None:
-            accuracy = accuracy_score(test_labels, predicted_labels)
-            per_sequence_accuracy = [accuracy_score(test_labels[i], predicted_labels[i]) for i in range(len(test_sequences))]
+            # Etiketleri sayıya dönüştürme
+            test_labels = [[label_mapping.get(x, x) for x in seq] for seq in test_labels]  # Her dizinin etiketlerini işliyoruz
+
+            # Tüm veriler için genel doğruluk
+            accuracy = np.mean([accuracy_score(test, pred) for test, pred in zip(test_labels, predicted_labels)])
+
+            # Her sekans için doğruluk
+            per_sequence_accuracy = [
+                accuracy_score(test, pred)
+                for test, pred in zip(test_labels, predicted_labels)
+            ]
         else:
             accuracy = None
             per_sequence_accuracy = None
 
         return accuracy, per_sequence_accuracy
+
         
     def save_model(self, filename):
         model_data = {
@@ -94,9 +120,12 @@ class MutationPredictionHMM:
             'states': self.states
         }
         joblib.dump(model_data, filename)
+        print(f"Model saved to {filename}")
 
     def load_model(self, filename):
         model_data = joblib.load(filename)
         self.model = model_data['model']
         self.observation_map = model_data['observation_map']
         self.states = model_data['states']
+        return self  # self nesnesini döndürüyoruz
+
