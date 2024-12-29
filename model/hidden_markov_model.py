@@ -53,7 +53,10 @@ class MutationPredictionHMM:
         logprob, predicted_states = self.model.decode(test_sequence, algorithm="viterbi")
         
         # Sonuçları döndürme
-        return [self.states[i] for i in predicted_states]
+        predictions = [self.states[i] for i in predicted_states]
+        print(f"Tahmin uzunluğu: {len(predictions)}, Test sekansı uzunluğu: {len(test_sequence)}")
+        return predictions
+
 
         
     def predict_multiple(self, test_sequences):
@@ -80,42 +83,44 @@ class MutationPredictionHMM:
 
         return predicted_labels_per_sequence
 
-
-    def evaluate(self, test_sequences, test_labels=None):
+    def evaluate(self, test_sequences):
         """
-        Modelin doğruluğunu değerlendirmek için fonksiyon.
-        :param test_sequences: Test verisi (DNA dizileri)
-        :param test_labels: Gerçek etiketler (isteğe bağlı)
+        Verilen test sekanslarını değerlendirir ve doğruluğu hesaplar.
+        :param test_sequences: Test sekansları (liste listesi)
+        :return: Genel doğruluk ve sekans başına doğruluk oranları
         """
+        total_correct = 0
+        total_count = 0
+        per_sequence_accuracy = []
 
-        # Tahmin edilen durumları elde et
-        predicted_labels = []
-        for seq in test_sequences:
-            predicted_states = self.predict(seq)
-            predicted_labels.append(predicted_states)  # Her dizinin tahmin ettiği tüm durumları alıyoruz
+        for idx, test_seq in enumerate(test_sequences):
+            # `predict` fonksiyonunu çağır ve tahminleri al
+            predictions = self.predict(test_seq)
 
-        # Tahminlerin sayıya dönüştürülmesi
-        label_mapping = {'Mutasyon Yok': 0, 'Mutasyon Var': 1}
-        predicted_labels = [[label_mapping.get(x, x) for x in seq] for seq in predicted_labels]  # Haritada olmayanları olduğu gibi bırak
+            # Uzunluk kontrolü
+            if len(test_seq) != len(predictions):
+                print(f"Uzunluk uyumsuzluğu! Test sekansı uzunluğu: {len(test_seq)}, Tahmin uzunluğu: {len(predictions)}")
+                continue
 
-        # Eğer test_labels sağlanmışsa doğruluğu hesapla
-        if test_labels is not None:
-            # Etiketleri sayıya dönüştürme
-            test_labels = [[label_mapping.get(x, x) for x in seq] for seq in test_labels]  # Her dizinin etiketlerini işliyoruz
+            # Doğru tahminleri say
+            correct = sum([1 for p, g in zip(predictions, test_seq) if p == g])
+            per_sequence_accuracy.append(correct / len(test_seq))
+            total_correct += correct
+            total_count += len(test_seq)
 
-            # Tüm veriler için genel doğruluk
-            accuracy = np.mean([accuracy_score(test, pred) for test, pred in zip(test_labels, predicted_labels)])
+            print(f"Test dizisi {idx+1}: Doğru tahmin sayısı: {correct}, Doğruluk: {correct / len(test_seq) * 100:.2f}%")
 
-            # Her sekans için doğruluk
-            per_sequence_accuracy = [
-                accuracy_score(test, pred)
-                for test, pred in zip(test_labels, predicted_labels)
-            ]
+        # Genel doğruluk hesaplama
+        if total_count > 0:
+            accuracy = total_correct / total_count
         else:
-            accuracy = None
-            per_sequence_accuracy = None
+            print("Hata: Toplam test sekansı uzunluğu sıfır!")
+            accuracy = 0.0
 
+        print(f"Genel doğruluk: {accuracy * 100:.2f}%")
         return accuracy, per_sequence_accuracy
+
+
 
         
     def save_model(self, filename):
